@@ -123,7 +123,7 @@ int bitmap_increment(bitmap_t *bitmap, unsigned int index, long offset)
     }
     
     if (temp == 0x0f) {
-        fprintf(stderr, "Error, 4 bit int Overflow\n");
+        //fprintf(stderr, "Error, 4 bit int Overflow\n");
         return -1;
     }
     
@@ -252,7 +252,7 @@ counting_bloom_t *new_counting_bloom(unsigned int capacity, double error_rate, c
 
 int counting_bloom_add(counting_bloom_t *bloom, const char *s, size_t len)
 {
-    unsigned int index, i, offset;
+    unsigned int index, i, offset, overflow=0;
     unsigned int *hashes = bloom->hashes;
     
     hash_func(bloom, s, len, hashes);
@@ -260,9 +260,12 @@ int counting_bloom_add(counting_bloom_t *bloom, const char *s, size_t len)
     for (i = 0; i < bloom->nfuncs; i++) {
         offset = i * bloom->counts_per_func;
         index = hashes[i] + offset;
-        bitmap_increment(bloom->bitmap, index, bloom->offset);
+        if( bitmap_increment(bloom->bitmap, index, bloom->offset) == -1) 
+		overflow ++;
     }
     bloom->header->count++;
+
+    if (overflow == bloom->nfuncs) return -1;
     
     return 0;
 }
@@ -427,9 +430,11 @@ int scaling_bloom_add(scaling_bloom_t *bloom, const char *s, size_t len, uint64_
     if (bloom->header->max_id < id) {
         bloom->header->max_id = id;
     }
-    counting_bloom_add(cur_bloom, s, len);
+    //counting_bloom_add(cur_bloom, s, len);
     
     bloom->header->mem_seqnum = seqnum + 1;
+    
+    if (counting_bloom_add(cur_bloom, s, len) == -1) return -1;
     
     return 1;
 }
