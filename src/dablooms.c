@@ -124,11 +124,11 @@ int bitmap_increment(bitmap_t *bitmap, unsigned int index, long offset)
     
     if (temp == 0x0f) {
         //fprintf(stderr, "Error, 4 bit int Overflow\n");
-        return -1;
+        return 16; // overflow
     }
     
     bitmap->array[access] = n;
-    return 0;
+    return (temp + 0x01);
 }
 
 /* increments the four bit counter */
@@ -252,7 +252,8 @@ counting_bloom_t *new_counting_bloom(unsigned int capacity, double error_rate, c
 
 int counting_bloom_add(counting_bloom_t *bloom, const char *s, size_t len)
 {
-    unsigned int index, i, offset, overflow=0;
+    unsigned int index, i, offset;
+    int temp=0, min=0xff;
     unsigned int *hashes = bloom->hashes;
     
     hash_func(bloom, s, len, hashes);
@@ -260,14 +261,12 @@ int counting_bloom_add(counting_bloom_t *bloom, const char *s, size_t len)
     for (i = 0; i < bloom->nfuncs; i++) {
         offset = i * bloom->counts_per_func;
         index = hashes[i] + offset;
-        if( bitmap_increment(bloom->bitmap, index, bloom->offset) == -1) 
-		overflow ++;
+        temp = bitmap_increment(bloom->bitmap, index, bloom->offset);
+	if (temp < min) min = temp;
     }
     bloom->header->count++;
-
-    if (overflow == bloom->nfuncs) return -1;
     
-    return 0;
+    return temp;
 }
 
 int counting_bloom_remove(counting_bloom_t *bloom, const char *s, size_t len)
@@ -409,7 +408,7 @@ uint64_t scaling_bloom_clear_seqnums(scaling_bloom_t *bloom)
 
 int scaling_bloom_add(scaling_bloom_t *bloom, const char *s, size_t len, uint64_t id)
 {
-    int i;
+    int i, c;
     uint64_t seqnum;
     
     counting_bloom_t *cur_bloom = NULL;
@@ -430,13 +429,13 @@ int scaling_bloom_add(scaling_bloom_t *bloom, const char *s, size_t len, uint64_
     if (bloom->header->max_id < id) {
         bloom->header->max_id = id;
     }
-    //counting_bloom_add(cur_bloom, s, len);
+    c = counting_bloom_add(cur_bloom, s, len);
     
     bloom->header->mem_seqnum = seqnum + 1;
     
-    if (counting_bloom_add(cur_bloom, s, len) == -1) return -1;
+    //if (counting_bloom_add(cur_bloom, s, len) == -1) return -1;
     
-    return 1;
+    return c;
 }
 
 int scaling_bloom_remove(scaling_bloom_t *bloom, const char *s, size_t len, uint64_t id)
